@@ -12,7 +12,7 @@ RUN uv export --frozen --no-dev --no-hashes --no-emit-project -o /tmp/req.txt \
  && rm /tmp/req*.txt \
  && useradd --uid 10020 --create-home --shell /usr/sbin/nologin mirofish
 COPY backend/ ./
-RUN mkdir -p uploads && chown -R mirofish /app/backend/uploads
+RUN mkdir -p uploads logs && chown -R mirofish /app/backend/uploads /app/backend/logs
 USER mirofish
 ENV FLASK_HOST=0.0.0.0 FLASK_PORT=5001 FLASK_DEBUG=False PYTHONUNBUFFERED=1
 EXPOSE 5001
