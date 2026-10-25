@@ -316,7 +316,8 @@ class SimulationRunner:
         max_rounds: int = None,  # Maximum simulation rounds (optional, for truncating long simulations)
         enable_graph_memory_update: bool = False,  # Whether to update activities to the graph
         graph_id: str = None,  # Graph ID (required when enabling graph updates)
-        storage: 'GraphStorage' = None  # GraphStorage instance (required if enable_graph_memory_update)
+        storage: 'GraphStorage' = None,  # GraphStorage instance (required if enable_graph_memory_update)
+        everyone_each_round: bool = False  # ARKEV: every agent acts in every round (Idea Lab)
     ) -> SimulationRunState:
         """
         Start simulation
@@ -387,11 +388,16 @@ class SimulationRunner:
             cls._graph_memory_enabled[simulation_id] = False
         
         # Determine which script to run (scripts located in backend/scripts/ directory)
+        # ARKEV: one platform runs through the parallel script too (--twitter-only /
+        # --reddit-only). The single-platform scripts never write actions.jsonl,
+        # so their actions were invisible and the run never showed as completed.
+        platform_flags = []
+        script_name = "run_parallel_simulation.py"
         if platform == "twitter":
-            script_name = "run_twitter_simulation.py"
+            platform_flags = ["--twitter-only"]
             state.twitter_running = True
         elif platform == "reddit":
-            script_name = "run_reddit_simulation.py"
+            platform_flags = ["--reddit-only"]
             state.reddit_running = True
         else:
             script_name = "run_parallel_simulation.py"
@@ -424,6 +430,9 @@ class SimulationRunner:
             # If max_rounds specified, add to command-line arguments
             if max_rounds is not None and max_rounds > 0:
                 cmd.extend(["--max-rounds", str(max_rounds)])
+            cmd.extend(platform_flags)
+            if everyone_each_round:
+                cmd.append("--everyone-each-round")
             
             # Create main log file to avoid stdout/stderr pipe buffer overflow
             main_log_path = os.path.join(sim_dir, "simulation.log")

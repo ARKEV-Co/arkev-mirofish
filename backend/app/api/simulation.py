@@ -1454,7 +1454,8 @@ def start_simulation():
             "platform": "parallel",                // Optional: twitter / reddit / parallel (Default)
             "max_rounds": 100,                     // Optional: Maximum simulation rounds, default unlimited
             "enable_graph_memory_update": false,   // Optional: Whether to enable knowledge graph memory updates for agents
-            "force": false                         // Optional: Force restart (stop running simulation and clean runtime files)
+            "force": false,                        // Optional: Force restart (stop running simulation and clean runtime files)
+            "everyone_each_round": false           // Optional (ARKEV): every agent acts in every round
         }
 
     About force Parameters:
@@ -1498,6 +1499,7 @@ def start_simulation():
         max_rounds = data.get('max_rounds')  # Optional: Maximum simulation rounds
         enable_graph_memory_update = data.get('enable_graph_memory_update', False)  # Optional：IsFalseEnable knowledge graph memory update
         force = data.get('force', False)  # Optional：Force restart
+        everyone_each_round = bool(data.get('everyone_each_round', False))  # ARKEV: every agent acts each round
 
         # Verify max_rounds Parameters
         if max_rounds is not None:
@@ -1601,7 +1603,8 @@ def start_simulation():
             platform=platform,
             max_rounds=max_rounds,
             enable_graph_memory_update=enable_graph_memory_update,
-            graph_id=graph_id
+            graph_id=graph_id,
+            everyone_each_round=everyone_each_round
         )
         
         # Update simulation status
