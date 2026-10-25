@@ -34,7 +34,9 @@ def _secrets_from_files():
     if auth and not os.environ.get('NEO4J_PASSWORD'):
         user, _, password = read(auth).partition('/')
         os.environ['NEO4J_PASSWORD'] = password
-        os.environ.setdefault('NEO4J_USER', user)
+        # Not setdefault: Coolify can pass an empty NEO4J_USER, which would log in as "".
+        if not os.environ.get('NEO4J_USER'):
+            os.environ['NEO4J_USER'] = user or 'neo4j'
     # OASIS / CAMEL read OPENAI_API_KEY; by default it is the same key as the LLM's.
     if os.environ.get('LLM_API_KEY') and not os.environ.get('OPENAI_API_KEY'):
         os.environ['OPENAI_API_KEY'] = os.environ['LLM_API_KEY']
@@ -60,7 +62,7 @@ class Config:
 
     # Neo4j configuration
     NEO4J_URI = os.environ.get('NEO4J_URI', 'bolt://localhost:7687')
-    NEO4J_USER = os.environ.get('NEO4J_USER', 'neo4j')
+    NEO4J_USER = os.environ.get('NEO4J_USER') or 'neo4j'
     NEO4J_PASSWORD = os.environ.get('NEO4J_PASSWORD', 'mirofish')
 
     # Embedding configuration
