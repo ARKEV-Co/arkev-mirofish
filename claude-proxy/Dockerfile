@@ -1,9 +1,10 @@
 # Claude subscription proxy for MiroFish (see proxy.py). The official Claude Code CLI, pinned.
+# uid 10020, like the backend, so both read /srv/arkev/secrets/mirofish.
 FROM node:22-bookworm-slim
 RUN apt-get update && apt-get install -y --no-install-recommends python3 ca-certificates \
  && rm -rf /var/lib/apt/lists/* \
  && npm install -g @anthropic-ai/claude-code@2.1.296 \
- && useradd --uid 10021 --create-home --shell /usr/sbin/nologin claudeproxy
+ && useradd --uid 10020 --create-home --shell /usr/sbin/nologin claudeproxy
 COPY proxy.py /app/proxy.py
 USER claudeproxy
 ENV HOME=/home/claudeproxy PROXY_PORT=8082

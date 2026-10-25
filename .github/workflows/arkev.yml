@@ -33,3 +33,18 @@ jobs:
           assert c.get('/api/simulation/list').status_code == 401
           print('ok')"
           docker run --rm --entrypoint claude arkev-claude-proxy:ci --version
+      - name: Secrets come from files (the server's convention)
+        run: |
+          mkdir -p s && echo -n proxy-k > s/proxy_key && echo -n api-t > s/api_token && echo -n neo4j/pw-x > s/neo4j_auth
+          sudo chown -R 10020 s
+          docker run --rm --entrypoint python -v "$PWD/s:/run/secrets:ro" -e LLM_API_KEY_FILE=/run/secrets/proxy_key \
+            -e NEO4J_AUTH_FILE=/run/secrets/neo4j_auth -e MIROFISH_API_TOKEN_FILE=/run/secrets/api_token -e NEO4J_URI=bolt://127.0.0.1:1 \
+            arkev-mirofish:ci -c "
+          import os
+          from app.config import Config
+          from app import create_app
+          assert os.environ['OPENAI_API_KEY'] == 'proxy-k' and Config.LLM_API_KEY == 'proxy-k'
+          assert Config.NEO4J_PASSWORD == 'pw-x' and Config.NEO4J_USER == 'neo4j'
+          c = create_app().test_client()
+          assert c.get('/api/simulation/list').status_code == 401
+          print('secret files ok')"

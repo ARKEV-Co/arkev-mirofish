@@ -52,6 +52,16 @@ _stats = {"calls": 0, "failures": 0, "waiting": 0}
 _stats_lock = threading.Lock()
 
 
+def proxy_key() -> str:
+    """The key callers must send: PROXY_API_KEY, or the file PROXY_API_KEY_FILE names."""
+    key = os.environ.get("PROXY_API_KEY", "").strip()
+    path = os.environ.get("PROXY_API_KEY_FILE", "").strip()
+    if not key and path:
+        with open(path, encoding="utf-8") as f:
+            key = f.read().strip()
+    return key
+
+
 class ProxyError(Exception):
     def __init__(self, status: int, message: str):
         super().__init__(message)
@@ -261,7 +271,7 @@ class Handler(BaseHTTPRequestHandler):
         self._json(status, {"error": {"message": message, "type": "server_error" if status >= 500 else "invalid_request_error"}})
 
     def _authorized(self) -> bool:
-        want = os.environ.get("PROXY_API_KEY", "")
+        want = proxy_key()
         got = self.headers.get("Authorization", "").removeprefix("Bearer ").strip()
         return bool(want) and hmac.compare_digest(got.encode(), want.encode())
 
@@ -298,8 +308,8 @@ class Handler(BaseHTTPRequestHandler):
 
 def main() -> None:
     logging.basicConfig(level=logging.INFO, format="[%(asctime)s] %(levelname)s %(message)s")
-    if not os.environ.get("PROXY_API_KEY"):
-        raise SystemExit("PROXY_API_KEY must be set (the key MiroFish sends as its LLM API key)")
+    if not proxy_key():
+        raise SystemExit("PROXY_API_KEY or PROXY_API_KEY_FILE must be set (the key MiroFish sends as its LLM API key)")
     if not shutil.which(CLAUDE_BIN):
         raise SystemExit(f"the Claude CLI ({CLAUDE_BIN}) is not installed")
     host, port = os.environ.get("PROXY_HOST", "0.0.0.0"), int(os.environ.get("PROXY_PORT", "8082"))
