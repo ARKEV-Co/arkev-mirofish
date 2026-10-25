@@ -126,3 +126,10 @@ def test_http_needs_the_key_and_streams_when_asked(cli):
     assert '"content": "streamed"' in text and text.endswith("data: [DONE]\n\n")
     assert json.loads(urllib.request.urlopen(base + "/health", timeout=10).read())["status"] == "ok"
     server.shutdown()
+
+
+def test_the_key_can_come_from_a_file(tmp_path, monkeypatch):
+    monkeypatch.delenv("PROXY_API_KEY", raising=False)
+    (tmp_path / "proxy_key").write_text("from-file\n")
+    monkeypatch.setenv("PROXY_API_KEY_FILE", str(tmp_path / "proxy_key"))
+    assert proxy.proxy_key() == "from-file"

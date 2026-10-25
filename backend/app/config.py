@@ -17,6 +17,32 @@ else:
     load_dotenv(override=True)
 
 
+def _secrets_from_files():
+    """ARKEV: secrets may come from files (NAME_FILE, mounted read-only from
+    /srv/arkev/secrets/mirofish), the server's convention. They are put into the environment here,
+    once, so the simulation subprocesses inherit them too. A value already set wins."""
+    def read(path):
+        with open(path, encoding='utf-8') as f:
+            return f.read().strip()
+
+    for name in ('LLM_API_KEY', 'OPENAI_API_KEY', 'MIROFISH_API_TOKEN', 'NEO4J_PASSWORD'):
+        path = os.environ.get(name + '_FILE', '').strip()
+        if path and not os.environ.get(name):
+            os.environ[name] = read(path)
+    # NEO4J_AUTH_FILE holds "user/password", the same file the neo4j container reads.
+    auth = os.environ.get('NEO4J_AUTH_FILE', '').strip()
+    if auth and not os.environ.get('NEO4J_PASSWORD'):
+        user, _, password = read(auth).partition('/')
+        os.environ['NEO4J_PASSWORD'] = password
+        os.environ.setdefault('NEO4J_USER', user)
+    # OASIS / CAMEL read OPENAI_API_KEY; by default it is the same key as the LLM's.
+    if os.environ.get('LLM_API_KEY') and not os.environ.get('OPENAI_API_KEY'):
+        os.environ['OPENAI_API_KEY'] = os.environ['LLM_API_KEY']
+
+
+_secrets_from_files()
+
+
 class Config:
     """Flask configuration class"""
 

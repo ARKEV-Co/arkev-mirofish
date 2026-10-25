@@ -40,12 +40,14 @@ Each step is a call to `/api/graph/*`, `/api/simulation/*` or `/api/report/*`.
 
 ## Running it
 
-In Coolify, set these four values, then deploy:
+Generated secrets are files in `/srv/arkev/secrets/mirofish`, each read through a `*_FILE` setting:
 
-- `CLAUDE_CODE_OAUTH_TOKEN`
-- `MIROFISH_API_TOKEN`
-- `MIROFISH_PROXY_KEY`
-- `MIROFISH_NEO4J_PASSWORD`
+- `api_token`
+- `proxy_key`
+- `neo4j_auth`, written as `neo4j/<password>`
+
+The header of `docker-compose.coolify.yml` has the commands to create them. The owner types only
+`CLAUDE_CODE_OAUTH_TOKEN` into Coolify, then deploys.
 
 The server has no GPU. All chat goes to Claude through the proxy, and Ollama only makes
 embeddings.

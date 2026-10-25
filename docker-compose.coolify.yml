@@ -10,11 +10,18 @@
 #   neo4j         the memory graph (instead of Zep Cloud: nothing leaves the server)
 #   ollama        embeddings only (nomic-embed-text, CPU); no chat model runs here
 #
-# Coolify environment (typed in Coolify's UI, never committed):
-#   CLAUDE_CODE_OAUTH_TOKEN   the owner's subscription token (valid one year)
-#   MIROFISH_API_TOKEN        random; Core sends it (set the same value in arkev-core)
-#   MIROFISH_PROXY_KEY        random; MiroFish -> claude-proxy
-#   MIROFISH_NEO4J_PASSWORD   random
+# Coolify environment: only CLAUDE_CODE_OAUTH_TOKEN, the owner's subscription token (valid one
+# year), typed by the owner in Coolify's UI.
+#
+# Generated secrets are files on the server, mounted read-only and read through *_FILE:
+#   /srv/arkev/secrets/mirofish/api_token    random; Core sends it as a Bearer token (Core reads the
+#                                            same value from its own secrets when Idea Lab is connected)
+#   /srv/arkev/secrets/mirofish/proxy_key    random; MiroFish -> claude-proxy
+#   /srv/arkev/secrets/mirofish/neo4j_auth   "neo4j/<random password>" (the neo4j image's format)
+# readable by uid 10020 (the mirofish and claude-proxy images' user), e.g.
+#   install -d -m 0750 -o 10020 /srv/arkev/secrets/mirofish
+#   for f in api_token proxy_key; do openssl rand -hex 32 | install -m 0400 -o 10020 /dev/stdin /srv/arkev/secrets/mirofish/$f; done
+#   printf 'neo4j/%s' "$(openssl rand -hex 24)" | install -m 0400 -o 10020 /dev/stdin /srv/arkev/secrets/mirofish/neo4j_auth
 services:
   mirofish:
     build:
@@ -22,20 +29,19 @@ services:
       dockerfile: Dockerfile.backend
     restart: unless-stopped
     environment:
-      - LLM_API_KEY=${MIROFISH_PROXY_KEY}
+      - LLM_API_KEY_FILE=/run/secrets/proxy_key
       - LLM_BASE_URL=http://claude-proxy:8082/v1
       - LLM_MODEL_NAME=claude-sonnet-5-5
-      # OASIS / CAMEL-AI (the simulated people) use the same proxy.
-      - OPENAI_API_KEY=${MIROFISH_PROXY_KEY}
+      # OASIS / CAMEL-AI (the simulated people) use the same proxy and key.
       - OPENAI_API_BASE_URL=http://claude-proxy:8082/v1
       - NEO4J_URI=bolt://neo4j:7687
-      - NEO4J_USER=neo4j
-      - NEO4J_PASSWORD=${MIROFISH_NEO4J_PASSWORD}
+      - NEO4J_AUTH_FILE=/run/secrets/neo4j_auth
       - EMBEDDING_MODEL=nomic-embed-text
       - EMBEDDING_BASE_URL=http://ollama:11434
-      - MIROFISH_API_TOKEN=${MIROFISH_API_TOKEN}
+      - MIROFISH_API_TOKEN_FILE=/run/secrets/api_token
     volumes:
       - mirofish-uploads:/app/backend/uploads
+      - /srv/arkev/secrets/mirofish:/run/secrets:ro
     depends_on:
       neo4j:
         condition: service_healthy
@@ -56,22 +62,26 @@ services:
     restart: unless-stopped
     environment:
       - CLAUDE_CODE_OAUTH_TOKEN=${CLAUDE_CODE_OAUTH_TOKEN}
-      - PROXY_API_KEY=${MIROFISH_PROXY_KEY}
+      - PROXY_API_KEY_FILE=/run/secrets/proxy_key
       - PROXY_MODEL=claude-sonnet-5-5
       # Claude calls at once; the subscription has usage limits, the rest wait in line.
       - PROXY_MAX_CONCURRENT=3
+    volumes:
+      - /srv/arkev/secrets/mirofish:/run/secrets:ro
     mem_limit: 2g
 
   neo4j:
     image: neo4j:5.18-community
     restart: unless-stopped
     environment:
-      - NEO4J_AUTH=neo4j/${MIROFISH_NEO4J_PASSWORD}
+      # The neo4j image reads "user/password" from this file at start.
+      - NEO4J_AUTH_FILE=/run/secrets/neo4j_auth
       - NEO4J_PLUGINS=["apoc"]
       - NEO4J_server_memory_heap_initial__size=512m
       - NEO4J_server_memory_heap_max__size=2g
     volumes:
       - neo4j-data:/data
+      - /srv/arkev/secrets/mirofish/neo4j_auth:/run/secrets/neo4j_auth:ro
     healthcheck:
       test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:7474 || exit 1"]
       interval: 10s
