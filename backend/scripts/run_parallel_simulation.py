@@ -843,6 +843,14 @@ def _enrich_action_context(
         # Post comment: supplement commented post information
         elif action_type == 'CREATE_COMMENT':
             post_id = action_args.get('post_id')
+            if not post_id and action_args.get('comment_id'):
+                # ARKEV: OASIS's trace keeps only the new comment's id; the post it
+                # answers is in the comment table.
+                cursor.execute("SELECT post_id FROM comment WHERE comment_id = ?", (action_args['comment_id'],))
+                row = cursor.fetchone()
+                if row and row[0] is not None:
+                    post_id = row[0]
+                    action_args['post_id'] = post_id
             if post_id:
                 post_info = _get_post_info(cursor, post_id, agent_names)
                 if post_info:
@@ -1041,9 +1049,14 @@ def get_active_agents_for_round(
     env,
     config: Dict[str, Any],
     current_hour: int,
-    round_num: int
+    round_num: int,
+    everyone: bool = False
 ) -> List:
     """Decide which Agents to activate this round based on time and configuration"""
+    if everyone:
+        # ARKEV (Idea Lab): every agent acts in every round, whatever the clock says.
+        return list(env.agent_graph.get_agents())
+
     time_config = config.get("time_config", {})
     agent_configs = config.get("agent_configs", [])
     
@@ -1103,7 +1116,8 @@ async def run_twitter_simulation(
     simulation_dir: str,
     action_logger: Optional[PlatformActionLogger] = None,
     main_logger: Optional[SimulationLogManager] = None,
-    max_rounds: Optional[int] = None
+    max_rounds: Optional[int] = None,
+    everyone: bool = False
 ) -> PlatformSimulation:
     """Run Twitter simulation
     
@@ -1151,6 +1165,11 @@ async def run_twitter_simulation(
     db_path = os.path.join(simulation_dir, "twitter_simulation.db")
     if os.path.exists(db_path):
         os.remove(db_path)
+    # ARKEV: OASIS's agents read their follower count from OASIS_DB_PATH and
+    # otherwise create a folder inside site-packages, which the non-root
+    # container can't write: every LLM round died with PermissionError.
+    # (Both platforms of a parallel run share the variable; the first wins.)
+    os.environ.setdefault("OASIS_DB_PATH", os.path.abspath(db_path))
     
     result.env = oasis.make(
         agent_graph=result.agent_graph,
@@ -1237,7 +1256,7 @@ async def run_twitter_simulation(
         simulated_day = simulated_minutes // (60 * 24) + 1
         
         active_agents = get_active_agents_for_round(
-            result.env, config, simulated_hour, round_num
+            result.env, config, simulated_hour, round_num, everyone
         )
         
         # Log round start regardless of active agents
@@ -1295,7 +1314,8 @@ async def run_reddit_simulation(
     simulation_dir: str,
     action_logger: Optional[PlatformActionLogger] = None,
     main_logger: Optional[SimulationLogManager] = None,
-    max_rounds: Optional[int] = None
+    max_rounds: Optional[int] = None,
+    everyone: bool = False
 ) -> PlatformSimulation:
     """Run Reddit simulation
     
@@ -1342,6 +1362,11 @@ async def run_reddit_simulation(
     db_path = os.path.join(simulation_dir, "reddit_simulation.db")
     if os.path.exists(db_path):
         os.remove(db_path)
+    # ARKEV: OASIS's agents read their follower count from OASIS_DB_PATH and
+    # otherwise create a folder inside site-packages, which the non-root
+    # container can't write: every LLM round died with PermissionError.
+    # (Both platforms of a parallel run share the variable; the first wins.)
+    os.environ.setdefault("OASIS_DB_PATH", os.path.abspath(db_path))
     
     result.env = oasis.make(
         agent_graph=result.agent_graph,
@@ -1436,7 +1461,7 @@ async def run_reddit_simulation(
         simulated_day = simulated_minutes // (60 * 24) + 1
         
         active_agents = get_active_agents_for_round(
-            result.env, config, simulated_hour, round_num
+            result.env, config, simulated_hour, round_num, everyone
         )
         
         # Log round start regardless of active agents
@@ -1514,6 +1539,12 @@ async def main():
         help='Maximum simulation rounds (optional, used to truncate long simulations)'
     )
     parser.add_argument(
+        '--everyone-each-round',
+        action='store_true',
+        default=False,
+        help='Every agent acts in every round (ARKEV Idea Lab), instead of by simulated hour'
+    )
+    parser.add_argument(
         '--no-wait',
         action='store_true',
         default=False,
@@ -1577,14 +1608,14 @@ async def main():
     reddit_result: Optional[PlatformSimulation] = None
     
     if args.twitter_only:
-        twitter_result = await run_twitter_simulation(config, simulation_dir, twitter_logger, log_manager, args.max_rounds)
+        twitter_result = await run_twitter_simulation(config, simulation_dir, twitter_logger, log_manager, args.max_rounds, args.everyone_each_round)
     elif args.reddit_only:
-        reddit_result = await run_reddit_simulation(config, simulation_dir, reddit_logger, log_manager, args.max_rounds)
+        reddit_result = await run_reddit_simulation(config, simulation_dir, reddit_logger, log_manager, args.max_rounds, args.everyone_each_round)
     else:
         # Run in parallel (each platform uses independent logger)
         results = await asyncio.gather(
-            run_twitter_simulation(config, simulation_dir, twitter_logger, log_manager, args.max_rounds),
-            run_reddit_simulation(config, simulation_dir, reddit_logger, log_manager, args.max_rounds),
+            run_twitter_simulation(config, simulation_dir, twitter_logger, log_manager, args.max_rounds, args.everyone_each_round),
+            run_reddit_simulation(config, simulation_dir, reddit_logger, log_manager, args.max_rounds, args.everyone_each_round),
         )
         twitter_result, reddit_result = results
     
