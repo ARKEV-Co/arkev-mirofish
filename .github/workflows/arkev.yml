@@ -1,0 +1,35 @@
+name: ARKEV
+on:
+  push:
+    branches: [main, "arkev/**"]
+  pull_request:
+
+jobs:
+  proxy:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install pytest
+      - name: Claude proxy tests
+        run: pytest -q claude-proxy/tests
+
+  images:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: The backend and the proxy images build
+        run: |
+          docker build -f Dockerfile.backend -t arkev-mirofish:ci .
+          docker build -t arkev-claude-proxy:ci claude-proxy
+      - name: The backend imports and needs its token
+        run: |
+          docker run --rm --entrypoint python -e MIROFISH_API_TOKEN=t -e NEO4J_URI=bolt://127.0.0.1:1 -e LLM_API_KEY=x arkev-mirofish:ci -c "
+          from app import create_app
+          app = create_app(); c = app.test_client()
+          assert c.get('/health').status_code == 200
+          assert c.get('/api/simulation/list').status_code == 401
+          print('ok')"
+          docker run --rm --entrypoint claude arkev-claude-proxy:ci --version

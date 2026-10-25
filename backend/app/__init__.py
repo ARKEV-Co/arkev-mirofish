@@ -39,8 +39,10 @@ def create_app(config_class=Config):
         logger.info("MiroFish-Offline Backend starting...")
         logger.info("=" * 50)
 
-    # Enable CORS
-    CORS(app, resources={r"/api/*": {"origins": "*"}})
+    # Enable CORS (ARKEV: only the origins in MIROFISH_CORS_ORIGINS; none when unset)
+    origins = [o.strip() for o in os.environ.get('MIROFISH_CORS_ORIGINS', '').split(',') if o.strip()]
+    if origins:
+        CORS(app, resources={r"/api/*": {"origins": origins}})
 
     # --- Initialize Neo4jStorage singleton (DI via app.extensions) ---
     from .storage import Neo4jStorage
@@ -59,6 +61,24 @@ def create_app(config_class=Config):
     SimulationRunner.register_cleanup()
     if should_log_startup:
         logger.info("Simulation process cleanup function registered")
+
+    # ARKEV: when MIROFISH_API_TOKEN is set, every /api route needs it as a Bearer token, so only
+    # ARKEV Core (on the server's private network) can start simulations or read them.
+    api_token = os.environ.get('MIROFISH_API_TOKEN', '').strip()
+    token_file = os.environ.get('MIROFISH_API_TOKEN_FILE', '').strip()
+    if not api_token and token_file:
+        with open(token_file, encoding='utf-8') as f:
+            api_token = f.read().strip()
+
+    @app.before_request
+    def require_token():
+        if not api_token or not request.path.startswith('/api/'):
+            return None
+        import hmac
+        got = request.headers.get('Authorization', '').removeprefix('Bearer ').strip()
+        if not hmac.compare_digest(got.encode(), api_token.encode()):
+            return {'success': False, 'error': 'unauthorized'}, 401
+        return None
 
     # Request logging middleware
     @app.before_request
