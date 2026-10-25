@@ -73,9 +73,10 @@ services:
   neo4j:
     image: neo4j:5.18-community
     restart: unless-stopped
+    # neo4j 5.18 has no NEO4J_AUTH_FILE (it turns it into an unknown "auth.file" setting and refuses
+    # to start), so the entrypoint reads "user/password" from the secret file into NEO4J_AUTH.
+    entrypoint: ["/bin/bash", "-c", "export NEO4J_AUTH=\"$$(cat /run/secrets/neo4j_auth)\"; exec tini -g -- /startup/docker-entrypoint.sh neo4j"]
     environment:
-      # The neo4j image reads "user/password" from this file at start.
-      - NEO4J_AUTH_FILE=/run/secrets/neo4j_auth
       - NEO4J_PLUGINS=["apoc"]
       - NEO4J_server_memory_heap_initial__size=512m
       - NEO4J_server_memory_heap_max__size=2g
