@@ -1,0 +1,20 @@
+# The MiroFish backend alone (API and simulations), for ARKEV's server. CPU-only: torch comes
+# from PyTorch's CPU index and the CUDA packages in uv.lock are left out (the server has no GPU).
+FROM python:3.11-slim-bookworm
+COPY --from=ghcr.io/astral-sh/uv:0.9.26 /uv /uvx /bin/
+WORKDIR /app/backend
+COPY backend/pyproject.toml backend/uv.lock ./
+RUN uv export --frozen --no-dev --no-hashes --no-emit-project -o /tmp/req.txt \
+ && TORCH=$(grep -E '^torch==' /tmp/req.txt | sed -E 's/^torch==([^ ;]+).*/\1/') \
+ && grep -viE '^(nvidia-|triton==|torch==)' /tmp/req.txt > /tmp/req-cpu.txt \
+ && uv pip install --system --no-cache --index-url https://download.pytorch.org/whl/cpu "torch==${TORCH}" \
+ && uv pip install --system --no-cache -r /tmp/req-cpu.txt \
+ && rm /tmp/req*.txt \
+ && useradd --uid 10020 --create-home --shell /usr/sbin/nologin mirofish
+COPY backend/ ./
+RUN mkdir -p uploads logs && chown -R mirofish /app/backend/uploads /app/backend/logs
+USER mirofish
+ENV FLASK_HOST=0.0.0.0 FLASK_PORT=5001 FLASK_DEBUG=False PYTHONUNBUFFERED=1
+EXPOSE 5001
+HEALTHCHECK --interval=30s --timeout=5s --start-period=60s CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:5001/health', timeout=4)"
+CMD ["python", "run.py"]
